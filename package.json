@@ -6,7 +6,22 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "NODE_ENV=development node src/index.js"
+    "dev": "NODE_ENV=development node src/index.js",
+    "build": "pkg . --compress GZip",
+    "build:win": "pkg . --target node18-win-x64 --compress GZip",
+    "build:linux": "pkg . --target node18-linux-x64 --compress GZip",
+    "build:macos": "pkg . --target node18-macos-x64 --compress GZip",
+    "build:all": "pkg . --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --compress GZip"
+  },
+  "bin": "src/index.js",
+  "pkg": {
+    "scripts": "src/**/*.js",
+    "targets": [
+      "node18-win-x64",
+      "node18-linux-x64",
+      "node18-macos-x64"
+    ],
+    "outputPath": "dist"
   },
   "keywords": [
     "wake-on-lan",
@@ -15,5 +30,8 @@
     "rushbee"
   ],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  }
 }
