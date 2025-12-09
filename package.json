@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "description": "Minimal Wake-on-LAN relay for RushBee cafes",
   "main": "src/index.js",
-  "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "dev": "NODE_ENV=development node src/index.js",

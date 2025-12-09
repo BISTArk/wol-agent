@@ -1,6 +1,6 @@
-import http from "http";
-import { randomUUID } from "crypto";
-import dgram from "dgram";
+const http = require("http");
+const { randomUUID } = require("crypto");
+const dgram = require("dgram");
 
 const PORT = Number(process.env.PORT || 4510);
 const HOST = process.env.HOST || "0.0.0.0";
