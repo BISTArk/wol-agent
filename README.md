@@ -4,24 +4,42 @@ A tiny HTTP service that relays Wake-on-LAN (WOL) requests to PCs on the same lo
 
 ## Features
 
-- No external dependencies — uses the Node.js standard library.
-- Minimal HTTP API (`POST /wake`) that accepts JSON.
-- Optional bearer-token authentication.
-- Lightweight logging (JSON) for easy aggregation.
-- Configurable broadcast address, UDP port, repeat count, and interval.
+- No external dependencies — uses the Node.js standard library
+- Minimal HTTP API (`POST /wake`) that accepts JSON
+- Optional bearer-token authentication
+- Lightweight logging (JSON) for easy aggregation
+- Configurable broadcast address, UDP port, repeat count, and interval
+- Runs silently in background (no visible window)
+- Automatically handles port conflicts
+- Single-file executable - just double-click and run
 
-## Requirements
+## Quick Start (Windows)
 
-- Node.js 18+ (built on standard modules: `http`, `dgram`, `crypto`).
-- Network permissions to send UDP broadcast packets.
+1. **Build the executable:**
+   ```bash
+   npm run build:win
+   ```
 
-## Installation
+2. **Run it:**
+   - Go to the `dist` folder
+   - Double-click **`launcher.vbs`**
+   - Done! Server is now running in the background
 
+**That's it!** The launcher automatically:
+- Kills any existing instance on the same port
+- Starts the server in the background
+- No console window appears
+
+To stop it, use Task Manager and end the `rushbee-wol-agent-win.exe` process.
+
+## Linux / macOS
+
+Build and run:
 ```bash
-npm install
+npm run build:linux   # or build:macos
+cd dist
+./rushbee-wol-agent-linux &
 ```
-
-(There are no external packages, but the step ensures lockfiles stay in sync.)
 
 ## Configuration
 
@@ -41,6 +59,34 @@ Set environment variables as needed:
 Create a `.env` file (ignored by git) or export variables before launching.
 
 Example `.env`:
+
+```
+PORT=4510
+WOL_AGENT_TOKEN=super-secret-token
+WOL_BROADCAST=192.168.1.255
+CORS_ORIGIN=http://pos.local
+```
+
+### Setting Environment Variables for Windows Service
+
+After installing as a service, set environment variables via registry:
+
+1. Open Registry Editor (regedit.exe)
+2. Navigate to: `HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\RushBeeWoLAgent`
+3. Right-click → New → Multi-String Value → Name it "Environment"
+4. Add entries like:
+   ```
+   PORT=4510
+   WOL_AGENT_TOKEN=your-secret-token
+   ```
+5. Restart the service
+
+Or use PowerShell:
+```powershell
+sc.exe stop RushBeeWoLAgent
+reg add "HKLM\SYSTEM\CurrentControlSet\Services\RushBeeWoLAgent" /v Environment /t REG_MULTI_SZ /d "PORT=4510`0WOL_AGENT_TOKEN=your-token" /f
+sc.exe start RushBeeWoLAgent
+```
 
 ```
 PORT=4510
@@ -73,37 +119,28 @@ Send a magic packet to a MAC address.
 
 **Headers**
 
-- `Content-Type: application/json`
-- `Authorization: Bearer <token>` (only if `WOL_AGENT_TOKEN` is set)
+### Setting Environment Variables (Windows)
 
-**Body**
+Set environment variables before running the launcher:
 
-```json
-{
-  "macAddress": "AA:BB:CC:DD:EE:FF",
-  "broadcastAddress": "192.168.1.255",      // optional
-  "port": 9,                                   // optional
-  "repeat": 3,                                 // optional
-  "interval": 120,                             // optional (ms between packets)
-  "meta": { "seatId": "...", "seatNumber": "..." } // optional, echoed in logs
-}
+```powershell
+# PowerShell
+$env:PORT = "4510"
+$env:WOL_AGENT_TOKEN = "your-secret-token"
 ```
 
-**Responses**
+Or create a batch file in the `dist` folder:
 
-- `200 OK` `{ success: true, message, data }`
-- `400 Bad Request` for missing/invalid MAC address or malformed JSON
-- `401 Unauthorized` if token required and missing/incorrect
-- `500 Internal Server Error` if UDP send fails
+**start-wol-agent.bat:**
+```batch
+@echo off
+set PORT=4510
+set WOL_AGENT_TOKEN=your-secret-token
+set WOL_BROADCAST=192.168.1.255
+cscript //nologo launcher.vbs
+```
 
-## Systemd service example
-
-```ini
-[Unit]
-Description=RushBee Wake-on-LAN Agent
-After=network.target
-
-[Service]
+Then just double-click the batch file instead.rvice]
 WorkingDirectory=/opt/rushbee/wol-agent
 ExecStart=/usr/bin/node src/index.js
 Environment=WOL_AGENT_TOKEN=super-secret

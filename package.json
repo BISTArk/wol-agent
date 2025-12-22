@@ -6,11 +6,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "NODE_ENV=development node src/index.js",
-    "build": "pkg . --compress GZip",
-    "build:win": "pkg . --target node18-win-x64 --compress GZip",
-    "build:linux": "pkg . --target node18-linux-x64 --compress GZip",
-    "build:macos": "pkg . --target node18-macos-x64 --compress GZip",
-    "build:all": "pkg . --targets node18-win-x64,node18-linux-x64,node18-macos-x64 --compress GZip"
+    "build": "npm run build:all",
+    "build:win": "mkdir -p dist-win && pkg . --target node18-win-x64 --compress GZip --output dist-win/rushbee-wol-agent-win.exe && cp launcher.vbs start-wol-agent.bat dist-win/ && cd dist-win && zip -r ../rushbee-wol-agent-win.zip . && cd ..",
+    "build:linux": "mkdir -p dist-linux && pkg . --target node18-linux-x64 --compress GZip --output dist-linux/rushbee-wol-agent-linux && cd dist-linux && zip -r ../rushbee-wol-agent-linux.zip . && cd ..",
+    "build:macos": "mkdir -p dist-macos && pkg . --target node18-macos-x64 --compress GZip --output dist-macos/rushbee-wol-agent-macos && cd dist-macos && zip -r ../rushbee-wol-agent-macos.zip . && cd ..",
+    "build:all": "npm run build:win && npm run build:linux && npm run build:macos",
+    "clean": "rm -rf dist-win dist-linux dist-macos dist *.zip"
   },
   "bin": "src/index.js",
   "pkg": {

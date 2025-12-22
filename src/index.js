@@ -140,6 +140,29 @@ const sendJson = (res, statusCode, payload) => {
   res.end(body);
 };
 
+const killProcessOnPort = (port) => {
+  if (process.platform === "win32") {
+    try {
+      const { execSync } = require("child_process");
+      const output = execSync(`netstat -ano | findstr :${port}`, { encoding: "utf8" });
+      const lines = output.split("\n").filter((line) => line.includes("LISTENING"));
+      
+      if (lines.length > 0) {
+        const pid = lines[0].trim().split(/\s+/).pop();
+        if (pid && pid !== String(process.pid)) {
+          log("info", `Killing existing process on port ${port}`, { pid });
+          execSync(`taskkill /F /PID ${pid}`, { stdio: "ignore" });
+          // Wait a bit for the port to be released
+          return new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      // Ignore errors - port might not be in use
+    }
+  }
+  return Promise.resolve();
+};
+
 const server = http.createServer(async (req, res) => {
   const requestId = randomUUID();
   const { method, url } = req;
@@ -219,13 +242,131 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (url === "/wake-bulk" && method === "POST") {
+    if (AGENT_TOKEN) {
+      const headerToken = req.headers["authorization"];
+      const expected = `Bearer ${AGENT_TOKEN}`;
+      if (headerToken !== expected) {
+        log("warn", "Unauthorized wake-bulk request", { requestId });
+        sendJson(res, 401, { success: false, message: "Unauthorized" });
+        return;
+      }
+    }
+
+    try {
+      const body = await readBody(req);
+      const { devices, broadcastAddress, port, repeat, interval } = body;
+
+      if (!Array.isArray(devices) || devices.length === 0) {
+        sendJson(res, 400, {
+          success: false,
+          message: "Invalid or missing devices array",
+        });
+        return;
+      }
+
+      const results = [];
+      const errors = [];
+
+      // Send magic packets to all devices in parallel
+      await Promise.allSettled(
+        devices.map(async (device) => {
+          const macAddress = typeof device === "string" ? device : device.macAddress;
+          const deviceMeta = typeof device === "object" ? device.meta : undefined;
+
+          if (!isValidMac(macAddress)) {
+            errors.push({
+              macAddress,
+              error: "Invalid MAC address format",
+            });
+            return;
+          }
+
+          try {
+            const result = await sendMagicPacket(macAddress, {
+              broadcastAddress: device.broadcastAddress || broadcastAddress || undefined,
+              port: device.port ? Number(device.port) : port ? Number(port) : undefined,
+              repeat: device.repeat ? Number(device.repeat) : repeat ? Number(repeat) : undefined,
+              interval: device.interval ? Number(device.interval) : interval ? Number(interval) : undefined,
+            });
+
+            results.push({
+              macAddress,
+              success: true,
+              packetsSent: result.packetsSent,
+              broadcastAddress: result.broadcastAddress,
+              port: result.port,
+              meta: deviceMeta,
+            });
+
+            log("info", "Magic packet sent (bulk)", {
+              requestId,
+              macAddress,
+              broadcastAddress: result.broadcastAddress,
+              port: result.port,
+              packetsSent: result.packetsSent,
+              meta: deviceMeta,
+            });
+          } catch (error) {
+            errors.push({
+              macAddress,
+              error: error.message,
+              meta: deviceMeta,
+            });
+
+            log("error", "Failed to send magic packet (bulk)", {
+              requestId,
+              macAddress,
+              error: error.message,
+              meta: deviceMeta,
+            });
+          }
+        })
+      );
+
+      const successCount = results.length;
+      const failureCount = errors.length;
+
+      sendJson(res, 200, {
+        success: true,
+        message: `Sent magic packets to ${successCount} device(s), ${failureCount} failed`,
+        data: {
+          requestId,
+          total: devices.length,
+          successful: successCount,
+          failed: failureCount,
+          results,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+      });
+    } catch (error) {
+      log("error", "Failed to process bulk wake request", { requestId, error: error.message });
+      sendJson(res, 500, {
+        success: false,
+        message: error.message || "Failed to process bulk wake request",
+      });
+    }
+    return;
+  }
+
   sendJson(res, 404, { success: false, message: "Not Found" });
 });
 
-server.listen(PORT, HOST, () => {
-  log("info", "Wake-on-LAN agent listening", {
-    port: PORT,
-    host: HOST,
-    hasToken: Boolean(AGENT_TOKEN),
-  });
-});
+const startServer = async () => {
+  try {
+    await killProcessOnPort(PORT);
+    
+    server.listen(PORT, HOST, () => {
+      log("info", "Wake-on-LAN agent listening", {
+        port: PORT,
+        host: HOST,
+        hasToken: Boolean(AGENT_TOKEN),
+      });
+    });
+  } catch (error) {
+    log("error", "Failed to start server", { error: error.message });
+    process.exit(1);
+  }
+};
+
+startServer();
